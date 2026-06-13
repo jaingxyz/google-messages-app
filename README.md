@@ -70,3 +70,8 @@ replace `/ABSOLUTE/PATH/TO` with wherever you cloned this repo (run `pwd` in the
 
 When a tool returns empty/odd results, run `debug_snapshot`. If selector counts are `0`, the UI changed —
 update the matching entry in the `SEL` block of `src/messages.mjs`.
+
+## License
+
+[GNU AGPL-3.0-or-later](LICENSE). Note the network-use clause: if you run a modified version of this
+software as a network service, you must make your modified source available to its users.

@@ -11,7 +11,7 @@
     "mcp": "node src/server.mjs",
     "postinstall": "playwright install chromium"
   },
-  "author": "Gaurav",
+  "author": "",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

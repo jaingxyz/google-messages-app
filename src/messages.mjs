@@ -25,27 +25,27 @@ const PROFILE_DIR =
 // ---------------------------------------------------------------------------
 // SELECTORS — the fragile part. Edit here when the UI changes.
 // ---------------------------------------------------------------------------
+// Verified against the live DOM 2026-06 (see tools/inspect.mjs to re-derive).
 const SEL = {
   // QR pairing screen (shown when NOT paired)
   qr: "mw-qr-code, [data-e2e-qr-code], canvas[aria-label*='QR' i]",
   // Conversation list + items (shown when paired)
   convList: "mws-conversations-list, mws-conversation-list",
   convItem: "mws-conversation-list-item",
-  convItemName: ".name, [data-e2e-conversation-name], h3",
-  convItemSnippet: ".snippet-text, mws-conversation-snippet, .snippet",
-  convItemUnread: ".unread, [data-e2e-is-unread='true']",
-  // Open thread: message bubbles
+  convItemName: "[data-e2e-conversation-name], h2.name, .name",
+  convItemSnippet: "mws-conversation-snippet, .snippet-text, .snippet",
+  convItemUnread: "[data-e2e-is-unread='true']",
+  // Open thread: message bubbles. Outgoing is the wrapper's `is-outgoing` attribute.
   messageWrapper: "mws-message-wrapper",
-  messageText: "mws-text-message-part .text-msg, .text-msg, mws-text-message-part",
-  messageOutgoing: "[data-e2e-is-outgoing='true'], .outgoing",
+  messageText: "mws-text-message-part, .text-msg",
   // Compose box + send
-  composeInput: "textarea[aria-label*='message' i], [data-e2e-message-input-box] textarea, textarea",
-  sendButton: "button[aria-label*='Send' i], [data-e2e-send-text-button]",
+  composeInput: "textarea[data-e2e-message-input-box], textarea[aria-label*='message' i]",
+  sendButton: "mws-message-send-button button, button[aria-label*='Send' i]",
   // New conversation flow
-  startChatButton: "a[href*='/web/conversations/new'], button[aria-label*='Start chat' i], [data-e2e-start-new-conversation]",
+  startChatButton: "mw-fab-link a, a[href*='conversations/new'], button[aria-label*='Start chat' i]",
   recipientInput: "input[aria-label*='recipient' i], input[aria-label*='name, phone' i], input[type='text']",
   recipientFirstResult: "mw-contact-selector-result, [data-e2e-contact-result], .contact-row",
-  // Search
+  // Search (best-effort — not yet verified against the live UI)
   searchButton: "button[aria-label*='Search' i], [data-e2e-search-button]",
   searchInput: "input[aria-label*='Search' i], input[type='search']",
 };
@@ -72,14 +72,18 @@ export class Messages {
     });
     this.page = this.context.pages()[0] || (await this.context.newPage());
     await this.page.goto(URL, { waitUntil: "domcontentloaded" });
-    // Give the SPA a moment to render either the QR screen or the conversation list.
-    await this.page.waitForTimeout(2500);
+    // Wait until the SPA renders EITHER the conversation list items (paired) or the
+    // QR screen (not paired) — the list loads behind a spinner, so a fixed delay isn't enough.
+    await Promise.race([
+      this.page.waitForSelector(SEL.convItem, { timeout: 25000 }).catch(() => {}),
+      this.page.waitForSelector(SEL.qr, { timeout: 25000 }).catch(() => {}),
+    ]);
     return this.page;
   }
 
   async pairingStatus() {
     const page = await this.ensureReady();
-    const paired = await page.locator(SEL.convList).first().isVisible().catch(() => false);
+    const paired = (await page.locator(SEL.convItem).count().catch(() => 0)) > 0;
     if (paired) return { paired: true, message: "Paired — Messages session is active." };
     const qr = await page.locator(SEL.qr).first().isVisible().catch(() => false);
     if (qr) {
@@ -135,7 +139,8 @@ export class Messages {
       const m = msgs.nth(i);
       const text = (await m.locator(SEL.messageText).first().textContent().catch(() => ""))?.trim();
       if (!text) continue;
-      const outgoing = await m.locator(SEL.messageOutgoing).first().isVisible().catch(() => false);
+      // Outgoing is the wrapper's own `is-outgoing` attribute ("true"/"false").
+      const outgoing = (await m.getAttribute("is-outgoing").catch(() => null)) === "true";
       out.push({ from: outgoing ? "me" : "them", text });
     }
     return out;

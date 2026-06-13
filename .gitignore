@@ -1,0 +1,4 @@
+node_modules/
+# The Chromium profile (your paired session) lives in ~/Library/Application Support — never committed.
+profile/
+*.log

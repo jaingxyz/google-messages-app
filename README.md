@@ -38,20 +38,22 @@ scanner**, scan it, and tick **“Remember this computer.”** The session now p
 
 ## Use as an MCP server
 
-Point your MCP client at the server. Example Claude Code / Claude Desktop config:
+Point your MCP client at the server. Example Claude Code / Claude Desktop config —
+replace `/ABSOLUTE/PATH/TO` with wherever you cloned this repo (run `pwd` in the repo root):
 
 ```json
 {
   "mcpServers": {
     "google-messages": {
       "command": "node",
-      "args": ["/Users/gauravjx/code/google-messages-app/src/server.mjs"]
+      "args": ["/ABSOLUTE/PATH/TO/google-messages-app/src/server.mjs"]
     }
   }
 }
 ```
 
-Set `"env": { "GM_HEADLESS": "1" }` to run without a visible window.
+> **Note:** the app must run with a visible window — the Messages web SPA crashes under
+> headless Chromium, so there is no headless mode.
 
 ### Tools
 

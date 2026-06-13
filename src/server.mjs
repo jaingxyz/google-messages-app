@@ -7,9 +7,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { Messages } from "./messages.mjs";
 
-// Headed by default so the same window doubles as your "app". Set GM_HEADLESS=1
-// to run without a visible window.
-const messages = new Messages({ headless: process.env.GM_HEADLESS === "1" });
+// Always headed — the same window doubles as your "app", and the Messages web
+// SPA crashes under headless Chromium, so there is no headless mode.
+const messages = new Messages({ headless: false });
 
 const server = new McpServer({ name: "google-messages", version: "1.0.0" });
 
@@ -36,9 +36,9 @@ server.tool(
 
 server.tool(
   "read_conversation",
-  "Read recent messages in a conversation, identified by contact/thread name.",
+  "Read recent messages in a conversation, identified by its EXACT thread name (as shown in list_conversations).",
   {
-    name: z.string().describe("Contact or thread name to match in the conversation list"),
+    name: z.string().describe("Exact conversation name from list_conversations (case-insensitive)"),
     limit: z.number().int().min(1).max(100).default(30).describe("Max messages to return"),
   },
   async ({ name, limit }) => {
@@ -48,9 +48,9 @@ server.tool(
 
 server.tool(
   "send_message",
-  "Send an SMS/RCS message. `to` may be a contact name (resolved in the UI) or a raw phone number.",
+  "Send an SMS/RCS message. `to` is matched against existing threads by EXACT name; if none matches it starts a new chat (use a phone number for new recipients). Returns an error if the send can't be confirmed.",
   {
-    to: z.string().describe("Contact name or phone number"),
+    to: z.string().describe("Exact existing thread name, or a phone number for a new chat"),
     text: z.string().describe("Message body"),
   },
   async ({ to, text: body }) => {

@@ -7,7 +7,10 @@ const PROFILE_DIR =
   process.env.GM_PROFILE_DIR ||
   path.join(os.homedir(), "Library", "Application Support", "google-messages-mcp", "profile");
 
-const ctx = await chromium.launchPersistentContext(PROFILE_DIR, { headless: false, viewport: { width: 1100, height: 800 } });
+const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
+  headless: false,
+  viewport: { width: 1100, height: 800 },
+});
 const page = ctx.pages()[0] || (await ctx.newPage());
 await page.goto("https://messages.google.com/web/conversations", { waitUntil: "domcontentloaded" });
 await page.waitForSelector("mws-conversation-list-item", { timeout: 25000 }).catch(() => {});
@@ -21,7 +24,9 @@ const probe = async (label) =>
     };
     return {
       label,
-      buttonsWithLabel: [...document.querySelectorAll("button[aria-label]")].map((b) => b.getAttribute("aria-label")),
+      buttonsWithLabel: [...document.querySelectorAll("button[aria-label]")].map((b) =>
+        b.getAttribute("aria-label"),
+      ),
       inputs: [...document.querySelectorAll("input")].map(attrs),
       searchTags: [...document.querySelectorAll("*")]
         .map((e) => e.tagName.toLowerCase())

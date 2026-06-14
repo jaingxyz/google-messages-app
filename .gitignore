@@ -1,4 +1,19 @@
 node_modules/
-# The Chromium profile (your paired session) lives in ~/Library/Application Support — never committed.
-profile/
+dist/
+coverage/
 *.log
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# The Chromium profile (your paired session) lives in ~/Library/Application Support.
+# Never commit any local copy of it.
+profile/
+
+# per-user Claude Code settings
+.claude/settings.local.json
+
+# Personal notes (never commit)
+LEARNINGS.md
+NOTES.md

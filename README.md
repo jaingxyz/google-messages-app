@@ -1,7 +1,7 @@
 # Google Messages — App + MCP
 
 Google Messages for web ([messages.google.com/web](https://messages.google.com/web)) wrapped as a
-persistent-session macOS app **and** an MCP server, so you can text from a desktop window *and* let
+persistent-session macOS app **and** an MCP server, so you can text from a desktop window _and_ let
 Claude send/read/search your messages.
 
 ## How it works (and the one big caveat)
@@ -19,7 +19,7 @@ One **persistent Chromium profile** (in `~/Library/Application Support/google-me
 holds your pairing, so you log in once. The same profile is both the app window and the automation target.
 
 > The profile can only be opened by one process at a time. When the MCP server is running, its headed
-> window *is* your app — don't also run `npm run app` simultaneously.
+> window _is_ your app — don't also run `npm run app` simultaneously.
 
 ## Setup
 
@@ -57,15 +57,15 @@ replace `/ABSOLUTE/PATH/TO` with wherever you cloned this repo (run `pwd` in the
 
 ### Tools
 
-| Tool | What it does |
-|---|---|
-| `pairing_status` | Check if the session is paired; call first if others fail |
-| `list_conversations` | Recent threads (name, snippet, unread) |
-| `read_conversation` | Recent messages in a thread (by name) |
-| `send_message` | Send to a contact name or raw phone number |
-| `search_messages` | Search threads for a query |
+| Tool                  | What it does                                                             |
+| --------------------- | ------------------------------------------------------------------------ |
+| `pairing_status`      | Check if the session is paired; call first if others fail                |
+| `list_conversations`  | Recent threads (name, snippet, unread)                                   |
+| `read_conversation`   | Recent messages in a thread (by name)                                    |
+| `send_message`        | Send to a contact name or raw phone number                               |
+| `search_messages`     | Search threads for a query                                               |
 | `delete_conversation` | Move a thread to Trash (recoverable) by exact name; refuses on ambiguity |
-| `debug_snapshot` | Maintenance: dump selector match counts when the UI changes |
+| `debug_snapshot`      | Maintenance: dump selector match counts when the UI changes              |
 
 ## Maintenance
 

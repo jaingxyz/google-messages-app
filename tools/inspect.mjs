@@ -8,7 +8,10 @@ const PROFILE_DIR =
   process.env.GM_PROFILE_DIR ||
   path.join(os.homedir(), "Library", "Application Support", "google-messages-mcp", "profile");
 
-const ctx = await chromium.launchPersistentContext(PROFILE_DIR, { headless: false, viewport: { width: 1100, height: 800 } });
+const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
+  headless: false,
+  viewport: { width: 1100, height: 800 },
+});
 const page = ctx.pages()[0] || (await ctx.newPage());
 await page.goto("https://messages.google.com/web/conversations", { waitUntil: "domcontentloaded" });
 
@@ -46,12 +49,15 @@ if (await firstItem.count()) {
     const msgTags = {};
     document.querySelectorAll("*").forEach((el) => {
       const t = el.tagName.toLowerCase();
-      if (t.includes("message") || t.includes("msg") || t.includes("text-")) msgTags[t] = (msgTags[t] || 0) + 1;
+      if (t.includes("message") || t.includes("msg") || t.includes("text-"))
+        msgTags[t] = (msgTags[t] || 0) + 1;
     });
     const wrap = document.querySelector("mws-message-wrapper");
     return {
       textareas: [...document.querySelectorAll("textarea")].map(fattrs),
-      labeledButtons: [...document.querySelectorAll("button[aria-label]")].map((b) => b.getAttribute("aria-label")),
+      labeledButtons: [...document.querySelectorAll("button[aria-label]")].map((b) =>
+        b.getAttribute("aria-label"),
+      ),
       messageRelatedTags: msgTags,
       firstMessageWrapperHTML: wrap ? wrap.outerHTML.slice(0, 900) : null,
     };

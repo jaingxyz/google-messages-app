@@ -46,8 +46,10 @@ const SEL = {
   composeInput: "textarea[data-e2e-message-input-box], textarea[aria-label*='message' i]",
   sendButton: "mws-message-send-button button, button[aria-label*='Send' i]",
   // New conversation flow (recipientInput's last fallback is broad — keep specific ones first)
-  startChatButton: "mw-fab-link a, a[href*='conversations/new'], button[aria-label*='Start chat' i]",
-  recipientInput: "input[aria-label*='recipient' i], input[aria-label*='name, phone' i], input[type='text']",
+  startChatButton:
+    "mw-fab-link a, a[href*='conversations/new'], button[aria-label*='Start chat' i]",
+  recipientInput:
+    "input[aria-label*='recipient' i], input[aria-label*='name, phone' i], input[type='text']",
   recipientFirstResult: "mw-contact-selector-result, [data-e2e-contact-result], .contact-row",
   // (Messages web has no built-in search UI, so search is done client-side
   // over the conversation list — see _search.)
@@ -75,14 +77,30 @@ export class Messages {
   }
 
   // --- public API (each call is serialized) -------------------------------
-  pairingStatus() { return this._serialize(() => this._pairingStatus()); }
-  listConversations(limit = 20) { return this._serialize(() => this._listConversations(limit)); }
-  readConversation(name, limit = 30) { return this._serialize(() => this._readConversation(name, limit)); }
-  sendMessage(to, text) { return this._serialize(() => this._sendMessage(to, text)); }
-  search(query, limit = 20) { return this._serialize(() => this._search(query, limit)); }
-  deleteConversation(name) { return this._serialize(() => this._deleteConversation(name)); }
-  debugSnapshot() { return this._serialize(() => this._debugSnapshot()); }
-  close() { return this._serialize(() => this._close()); }
+  pairingStatus() {
+    return this._serialize(() => this._pairingStatus());
+  }
+  listConversations(limit = 20) {
+    return this._serialize(() => this._listConversations(limit));
+  }
+  readConversation(name, limit = 30) {
+    return this._serialize(() => this._readConversation(name, limit));
+  }
+  sendMessage(to, text) {
+    return this._serialize(() => this._sendMessage(to, text));
+  }
+  search(query, limit = 20) {
+    return this._serialize(() => this._search(query, limit));
+  }
+  deleteConversation(name) {
+    return this._serialize(() => this._deleteConversation(name));
+  }
+  debugSnapshot() {
+    return this._serialize(() => this._debugSnapshot());
+  }
+  close() {
+    return this._serialize(() => this._close());
+  }
 
   // --- browser lifecycle (unlocked: idempotent, also called by app.mjs) ----
   async ensureReady() {
@@ -112,9 +130,17 @@ export class Messages {
   // --- internal workers (NOT locked — public wrappers above hold the lock) -
   async _pairingStatus() {
     const page = await this.ensureReady();
-    const paired = (await page.locator(SEL.convItem).count().catch(() => 0)) > 0;
+    const paired =
+      (await page
+        .locator(SEL.convItem)
+        .count()
+        .catch(() => 0)) > 0;
     if (paired) return { paired: true, message: "Paired — Messages session is active." };
-    const qr = await page.locator(SEL.qr).first().isVisible().catch(() => false);
+    const qr = await page
+      .locator(SEL.qr)
+      .first()
+      .isVisible()
+      .catch(() => false);
     if (qr) {
       return {
         paired: false,
@@ -124,7 +150,10 @@ export class Messages {
           "and tick 'Remember this computer'.",
       };
     }
-    return { paired: false, message: "Could not determine pairing state — open the app window to check." };
+    return {
+      paired: false,
+      message: "Could not determine pairing state — open the app window to check.",
+    };
   }
 
   async _requirePaired() {
@@ -141,11 +170,21 @@ export class Messages {
     const count = await items.count();
     const matches = [];
     for (let i = 0; i < count; i++) {
-      const nm = (await items.nth(i).locator(SEL.convItemName).first().textContent().catch(() => ""))?.trim() || "";
+      const nm =
+        (
+          await items
+            .nth(i)
+            .locator(SEL.convItemName)
+            .first()
+            .textContent()
+            .catch(() => "")
+        )?.trim() || "";
       if (nm.toLowerCase() === target) matches.push(i);
     }
     if (matches.length > 1) {
-      throw new Error(`"${name}" matches ${matches.length} conversations exactly — be more specific.`);
+      throw new Error(
+        `"${name}" matches ${matches.length} conversations exactly — be more specific.`,
+      );
     }
     return matches.length === 1 ? items.nth(matches[0]) : null;
   }
@@ -156,10 +195,33 @@ export class Messages {
     const out = [];
     for (let i = 0; i < n; i++) {
       const it = items.nth(i);
-      const name = (await it.locator(SEL.convItemName).first().textContent().catch(() => ""))?.trim() || "(unknown)";
-      const snippet = (await it.locator(SEL.convItemSnippet).first().textContent().catch(() => ""))?.trim() || "";
+      const name =
+        (
+          await it
+            .locator(SEL.convItemName)
+            .first()
+            .textContent()
+            .catch(() => "")
+        )?.trim() || "(unknown)";
+      const snippet =
+        (
+          await it
+            .locator(SEL.convItemSnippet)
+            .first()
+            .textContent()
+            .catch(() => "")
+        )?.trim() || "";
       const entry = withMeta
-        ? { index: i, name, snippet, unread: await it.locator(SEL.convItemUnread).first().isVisible().catch(() => false) }
+        ? {
+            index: i,
+            name,
+            snippet,
+            unread: await it
+              .locator(SEL.convItemUnread)
+              .first()
+              .isVisible()
+              .catch(() => false),
+          }
         : { name, snippet };
       out.push(entry);
     }
@@ -174,7 +236,8 @@ export class Messages {
   async _openConversationByName(name) {
     await this._requirePaired();
     const item = await this._findConversation(name);
-    if (!item) throw new Error(`No open conversation named "${name}". Use send_message to start a new one.`);
+    if (!item)
+      throw new Error(`No open conversation named "${name}". Use send_message to start a new one.`);
     await item.click();
     await this.page.waitForTimeout(1200);
   }
@@ -188,8 +251,15 @@ export class Messages {
     for (let i = start; i < total; i++) {
       const m = msgs.nth(i);
       // A wrapper can hold multiple text parts — join them so nothing is dropped.
-      let parts = await m.locator(SEL.messagePart).allTextContents().catch(() => []);
-      if (!parts.length) parts = await m.locator(SEL.messageTextFallback).allTextContents().catch(() => []);
+      let parts = await m
+        .locator(SEL.messagePart)
+        .allTextContents()
+        .catch(() => []);
+      if (!parts.length)
+        parts = await m
+          .locator(SEL.messageTextFallback)
+          .allTextContents()
+          .catch(() => []);
       parts = parts.map((s) => s.trim()).filter(Boolean);
       if (!parts.length) continue;
       // Outgoing is the wrapper's own `is-outgoing` attribute ("true"/"false").
@@ -244,7 +314,9 @@ export class Messages {
     // still there, the message was NOT sent (disabled send, unresolved recipient, etc.).
     const remaining = (await input.inputValue().catch(() => ""))?.trim();
     if (remaining) {
-      throw new Error("Send not confirmed — the text is still in the compose box, so the message may not have been sent.");
+      throw new Error(
+        "Send not confirmed — the text is still in the compose box, so the message may not have been sent.",
+      );
     }
     return { ok: true, to, text };
   }
@@ -283,7 +355,9 @@ export class Messages {
     await page.waitForTimeout(800);
 
     // Some versions show a confirmation dialog — confirm only an affirmative button.
-    const confirm = page.locator(SEL.confirmTrashButton, { hasText: /trash|delete|confirm|ok/i }).first();
+    const confirm = page
+      .locator(SEL.confirmTrashButton, { hasText: /trash|delete|confirm|ok/i })
+      .first();
     if ((await confirm.count()) && (await confirm.isVisible().catch(() => false))) {
       await confirm.click();
       await page.waitForTimeout(800);
@@ -296,9 +370,15 @@ export class Messages {
       gone = !(await this._findConversation(name).catch(() => null));
     }
     if (!gone) {
-      throw new Error(`Tried to trash "${name}" but it's still in the list — it may not have been removed.`);
+      throw new Error(
+        `Tried to trash "${name}" but it's still in the list — it may not have been removed.`,
+      );
     }
-    return { ok: true, trashed: name, note: "Moved to Trash — recoverable from the Messages Trash folder." };
+    return {
+      ok: true,
+      trashed: name,
+      note: "Moved to Trash — recoverable from the Messages Trash folder.",
+    };
   }
 
   async _debugSnapshot() {
@@ -307,7 +387,10 @@ export class Messages {
     const title = await page.title();
     const probe = {};
     for (const [k, v] of Object.entries(SEL)) {
-      probe[k] = await page.locator(v).count().catch(() => -1);
+      probe[k] = await page
+        .locator(v)
+        .count()
+        .catch(() => -1);
     }
     return { url, title, selectorCounts: probe };
   }

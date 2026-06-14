@@ -60,7 +60,7 @@ server.tool(
 
 server.tool(
   "search_messages",
-  "Search conversations for a query string; returns matching threads.",
+  "Search the loaded conversation list by name and last-message snippet (case-insensitive). Note: Messages web has no full-text search, so this only covers currently-loaded threads' names/snippets, not full message history.",
   {
     query: z.string().describe("Text to search for"),
     limit: z.number().int().min(1).max(50).default(20),

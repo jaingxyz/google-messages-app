@@ -52,6 +52,11 @@ const SEL = {
   // Search (best-effort — not yet verified against the live UI)
   searchButton: "button[aria-label*='Search' i], [data-e2e-search-button]",
   searchInput: "input[aria-label*='Search' i], input[type='search']",
+  // Delete flow: per-row Options button → menu → "Move to trash" (recoverable).
+  convOptionsButton: "button[aria-label^='Options for' i]",
+  menuItem: "[role='menuitem'], button.mat-mdc-menu-item",
+  // Some versions show a confirm dialog; click its affirmative button if present.
+  confirmTrashButton: "mat-dialog-container button, [role='dialog'] button",
 };
 
 export class Messages {
@@ -76,6 +81,7 @@ export class Messages {
   readConversation(name, limit = 30) { return this._serialize(() => this._readConversation(name, limit)); }
   sendMessage(to, text) { return this._serialize(() => this._sendMessage(to, text)); }
   search(query, limit = 20) { return this._serialize(() => this._search(query, limit)); }
+  deleteConversation(name) { return this._serialize(() => this._deleteConversation(name)); }
   debugSnapshot() { return this._serialize(() => this._debugSnapshot()); }
   close() { return this._serialize(() => this._close()); }
 
@@ -240,6 +246,42 @@ export class Messages {
     await input.fill(query);
     await this.page.waitForTimeout(1800);
     return this._extractItems(limit, false);
+  }
+
+  // Move a conversation to Trash (recoverable). Uses EXACT name matching and refuses
+  // on ambiguity (via _findConversation) so it can never trash the wrong thread.
+  async _deleteConversation(name) {
+    await this._requirePaired();
+    const page = this.page;
+    const item = await this._findConversation(name);
+    if (!item) throw new Error(`No conversation named "${name}" to delete.`);
+
+    await item.hover();
+    await page.waitForTimeout(300);
+    await item.locator(SEL.convOptionsButton).first().click();
+    await page.waitForTimeout(600);
+
+    const trash = page.locator(SEL.menuItem, { hasText: /move to trash/i }).first();
+    if (!(await trash.count())) {
+      await page.keyboard.press("Escape").catch(() => {});
+      throw new Error("Could not find the 'Move to trash' option — the menu UI may have changed.");
+    }
+    await trash.click();
+    await page.waitForTimeout(800);
+
+    // Some versions show a confirmation dialog — confirm only an affirmative button.
+    const confirm = page.locator(SEL.confirmTrashButton, { hasText: /trash|delete|confirm|ok/i }).first();
+    if ((await confirm.count()) && (await confirm.isVisible().catch(() => false))) {
+      await confirm.click();
+      await page.waitForTimeout(800);
+    }
+
+    // Verify it's gone from the list.
+    const stillThere = await this._findConversation(name).catch(() => null);
+    if (stillThere) {
+      throw new Error(`Tried to trash "${name}" but it's still in the list — it may not have been removed.`);
+    }
+    return { ok: true, trashed: name, note: "Moved to Trash — recoverable from the Messages Trash folder." };
   }
 
   async _debugSnapshot() {

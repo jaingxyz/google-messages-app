@@ -71,6 +71,15 @@ server.tool(
 );
 
 server.tool(
+  "delete_conversation",
+  "Move a conversation to Trash (recoverable from the Messages Trash folder), matched by its EXACT name. Refuses on ambiguity. Destructive — only call with clear user intent.",
+  { name: z.string().describe("Exact conversation name from list_conversations (case-insensitive)") },
+  async ({ name }) => {
+    try { return text(await messages.deleteConversation(name)); } catch (e) { return fail(e); }
+  }
+);
+
+server.tool(
   "debug_snapshot",
   "Maintenance: dump the live page URL/title and how many elements each selector matches. Use this to fix selectors when the UI changes.",
   {},

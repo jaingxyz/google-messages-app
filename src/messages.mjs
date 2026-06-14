@@ -276,9 +276,13 @@ export class Messages {
       await page.waitForTimeout(800);
     }
 
-    // Verify it's gone from the list.
-    const stillThere = await this._findConversation(name).catch(() => null);
-    if (stillThere) {
+    // Verify it's gone — poll, since the list takes a moment to re-render after trashing.
+    let gone = false;
+    for (let attempt = 0; attempt < 6 && !gone; attempt++) {
+      await page.waitForTimeout(500);
+      gone = !(await this._findConversation(name).catch(() => null));
+    }
+    if (!gone) {
       throw new Error(`Tried to trash "${name}" but it's still in the list — it may not have been removed.`);
     }
     return { ok: true, trashed: name, note: "Moved to Trash — recoverable from the Messages Trash folder." };

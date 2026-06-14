@@ -257,21 +257,22 @@ export class Messages {
 
   // Find a conversation by EXACT (case-insensitive) name, scrolling to reach older
   // threads. Compares only the name element (not snippet/timestamp) so it can't pick the
-  // wrong thread. Returns a LIVE locator (the row is on-screen when returned) or null.
+  // wrong thread. Returns the stable conversation id (href) or null — callers resolve it
+  // with _locatorById, which is robust to the list reordering between find and action.
+  //
+  // Note: ambiguity is only detected within a single scroll window; two threads with the
+  // identical display name far apart in the list won't be flagged (rare for exact names).
   async _findConversation(name) {
     const target = name.trim().toLowerCase();
-    const items = this.page.locator(SEL.convItem);
     await this._scrollListTo(0);
     const seen = new Set();
     for (let pass = 0; pass < 80; pass++) {
       const batch = await this._snapshotLoaded();
-      const winMatches = batch
-        .map((b, i) => (b.name.toLowerCase() === target ? i : -1))
-        .filter((i) => i >= 0);
+      const winMatches = batch.filter((b) => b.name.toLowerCase() === target);
       if (winMatches.length > 1) {
         throw new Error(`"${name}" matches multiple conversations exactly — be more specific.`);
       }
-      if (winMatches.length === 1) return items.nth(winMatches[0]);
+      if (winMatches.length === 1) return winMatches[0].id;
       const before = seen.size;
       for (const b of batch) seen.add(b.id);
       const grew = seen.size > before;
@@ -279,6 +280,18 @@ export class Messages {
       if (!moved && !grew) return null; // bottom + nothing new → exhausted
     }
     return null;
+  }
+
+  // Resolve a conversation id (href) to a stable locator — matches by id, not position,
+  // so it stays correct even if the list reorders after the row was found.
+  _locatorById(id) {
+    // NB: use a single `a[href=...]` here — do NOT interpolate SEL.convItemLink, which is
+    // a comma-list and would turn `:has(...)` into a match-any-row predicate.
+    if (id && id.startsWith("/")) {
+      return this.page.locator(`${SEL.convItem}:has(a[href="${id}"])`).first();
+    }
+    // Fallback (no href was available): match by name text.
+    return this.page.locator(SEL.convItem, { hasText: id }).first();
   }
 
   async _extractItems(limit, withMeta) {
@@ -292,10 +305,10 @@ export class Messages {
 
   async _openConversationByName(name) {
     await this._requirePaired();
-    const item = await this._findConversation(name);
-    if (!item)
+    const id = await this._findConversation(name);
+    if (!id)
       throw new Error(`No open conversation named "${name}". Use send_message to start a new one.`);
-    await item.click();
+    await this._locatorById(id).click();
     await this.page.waitForTimeout(1200);
   }
 
@@ -331,9 +344,9 @@ export class Messages {
     const page = this.page;
 
     // Open an existing thread only on an EXACT name match; otherwise start a new chat.
-    const existing = await this._findConversation(to);
-    if (existing) {
-      await existing.click();
+    const existingId = await this._findConversation(to);
+    if (existingId) {
+      await this._locatorById(existingId).click();
       await page.waitForTimeout(1000);
     } else {
       await page.locator(SEL.startChatButton).first().click();
@@ -395,8 +408,9 @@ export class Messages {
   async _deleteConversation(name) {
     await this._requirePaired();
     const page = this.page;
-    const item = await this._findConversation(name);
-    if (!item) throw new Error(`No conversation named "${name}" to delete.`);
+    const id = await this._findConversation(name);
+    if (!id) throw new Error(`No conversation named "${name}" to delete.`);
+    const item = this._locatorById(id);
 
     await item.hover();
     await page.waitForTimeout(300);
@@ -420,11 +434,13 @@ export class Messages {
       await page.waitForTimeout(800);
     }
 
-    // Verify it's gone — poll, since the list takes a moment to re-render after trashing.
+    // Verify it's gone — poll the current window for the trashed id (cheap: no re-scroll,
+    // since the row was on-screen and trashing removes it in place).
     let gone = false;
-    for (let attempt = 0; attempt < 6 && !gone; attempt++) {
-      await page.waitForTimeout(500);
-      gone = !(await this._findConversation(name).catch(() => null));
+    for (let attempt = 0; attempt < 8 && !gone; attempt++) {
+      await page.waitForTimeout(400);
+      const ids = (await this._snapshotLoaded()).map((b) => b.id);
+      gone = !ids.includes(id);
     }
     if (!gone) {
       throw new Error(

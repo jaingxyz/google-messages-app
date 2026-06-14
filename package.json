@@ -15,7 +15,8 @@
     "lint": "for f in src/*.mjs tools/*.mjs; do node --check \"$f\" || exit 1; done",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "postinstall": "playwright install chromium"
+    "postinstall": "playwright install chromium",
+    "prepare": "husky"
   },
   "author": "",
   "license": "AGPL-3.0-or-later",
@@ -25,6 +26,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
     "prettier": "^3.4.0"
   }
 }

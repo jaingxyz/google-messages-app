@@ -64,6 +64,7 @@ replace `/ABSOLUTE/PATH/TO` with wherever you cloned this repo (run `pwd` in the
 | `read_conversation` | Recent messages in a thread (by name) |
 | `send_message` | Send to a contact name or raw phone number |
 | `search_messages` | Search threads for a query |
+| `delete_conversation` | Move a thread to Trash (recoverable) by exact name; refuses on ambiguity |
 | `debug_snapshot` | Maintenance: dump selector match counts when the UI changes |
 
 ## Maintenance

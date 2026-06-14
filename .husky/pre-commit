@@ -1,0 +1,10 @@
+# Lightweight, offline pre-commit checks. The deeper /code-review pass is run
+# separately (it's an interactive Claude Code skill, not a shell command).
+# Skip with `git commit --no-verify` if you must.
+echo "pre-commit: lint (syntax) + format check"
+npm run lint || { echo "✗ lint (node --check) failed"; exit 1; }
+npm run format:check || {
+  echo "✗ prettier formatting issues — run 'npm run format' to fix";
+  exit 1;
+}
+echo "✓ pre-commit checks passed"

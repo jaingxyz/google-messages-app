@@ -49,9 +49,8 @@ const SEL = {
   startChatButton: "mw-fab-link a, a[href*='conversations/new'], button[aria-label*='Start chat' i]",
   recipientInput: "input[aria-label*='recipient' i], input[aria-label*='name, phone' i], input[type='text']",
   recipientFirstResult: "mw-contact-selector-result, [data-e2e-contact-result], .contact-row",
-  // Search (best-effort — not yet verified against the live UI)
-  searchButton: "button[aria-label*='Search' i], [data-e2e-search-button]",
-  searchInput: "input[aria-label*='Search' i], input[type='search']",
+  // (Messages web has no built-in search UI, so search is done client-side
+  // over the conversation list — see _search.)
   // Delete flow: per-row Options button → menu → "Move to trash" (recoverable).
   convOptionsButton: "button[aria-label^='Options for' i]",
   menuItem: "[role='menuitem'], button.mat-mdc-menu-item",
@@ -239,13 +238,16 @@ export class Messages {
     return { ok: true, to, text };
   }
 
+  // Messages web has no search UI, so we filter the loaded conversation list
+  // client-side by name and last-message snippet (case-insensitive substring).
   async _search(query, limit) {
     await this._requirePaired();
-    await this.page.locator(SEL.searchButton).first().click().catch(() => {});
-    const input = this.page.locator(SEL.searchInput).first();
-    await input.fill(query);
-    await this.page.waitForTimeout(1800);
-    return this._extractItems(limit, false);
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const all = await this._extractItems(200, false);
+    return all
+      .filter((c) => c.name.toLowerCase().includes(q) || c.snippet.toLowerCase().includes(q))
+      .slice(0, limit);
   }
 
   // Move a conversation to Trash (recoverable). Uses EXACT name matching and refuses

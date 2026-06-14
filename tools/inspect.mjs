@@ -15,13 +15,6 @@ const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
 const page = ctx.pages()[0] || (await ctx.newPage());
 await page.goto("https://messages.google.com/web/conversations", { waitUntil: "domcontentloaded" });
 
-const attrs = (el) => {
-  if (!el) return null;
-  const o = { tag: el.tagName.toLowerCase() };
-  for (const a of el.attributes) o[a.name] = a.value.slice(0, 80);
-  return o;
-};
-
 // Phase 1: wait for the conversation list to populate
 await page.waitForSelector("mws-conversation-list-item", { timeout: 25000 }).catch(() => {});
 const listInfo = await page.evaluate(() => {

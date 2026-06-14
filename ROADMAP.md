@@ -13,12 +13,12 @@ selector block and the per-action flows in `src/messages.mjs` against WhatsApp's
 **The risk profile is materially worse, though:**
 
 - **Ban risk.** WhatsApp's ToS explicitly prohibit unofficial automation, and Meta
-  actively detects and bans accounts for it — especially automated *sending*. Reading
+  actively detects and bans accounts for it — especially automated _sending_. Reading
   is lower-risk; sending is where people lose their number. (Google Messages is far
   more lenient by comparison.)
 - **Sanctioned path = WhatsApp Business Cloud API** (Meta's official API). The
   legitimate way to automate, but built for businesses: Business account, registered
-  number, template-message rules. Not designed for automating a *personal* number.
+  number, template-message rules. Not designed for automating a _personal_ number.
 - Reverse-engineered libraries (`whatsapp-web.js`, `Baileys`) exist and are popular,
   but carry the same ToS/ban exposure as a Playwright wrapper.
 

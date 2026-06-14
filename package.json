@@ -1,14 +1,20 @@
 {
   "name": "google-messages-mcp",
   "version": "1.0.0",
-  "description": "Google Messages for web as a persistent-session macOS app + an MCP server to send/read/search texts.",
+  "description": "Google Messages for web as a persistent-session macOS app + an MCP server to send/read/search/delete texts.",
   "type": "module",
   "bin": {
     "google-messages-mcp": "src/server.mjs"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "app": "node src/app.mjs",
     "mcp": "node src/server.mjs",
+    "lint": "for f in src/*.mjs tools/*.mjs; do node --check \"$f\" || exit 1; done",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "postinstall": "playwright install chromium"
   },
   "author": "",
@@ -17,5 +23,8 @@
     "@modelcontextprotocol/sdk": "^1.12.0",
     "playwright": "^1.49.0",
     "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.4.0"
   }
 }

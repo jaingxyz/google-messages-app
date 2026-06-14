@@ -16,4 +16,7 @@ console.error("App window is open. Leave it running. Close the window or press C
 
 // Keep the process alive until the window/context closes.
 process.stdin.resume();
-process.on("SIGINT", async () => { await messages.close(); process.exit(0); });
+process.on("SIGINT", async () => {
+  await messages.close();
+  process.exit(0);
+});

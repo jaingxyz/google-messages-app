@@ -13,16 +13,25 @@ const messages = new Messages({ headless: false });
 
 const server = new McpServer({ name: "google-messages", version: "1.0.0" });
 
-const text = (obj) => ({ content: [{ type: "text", text: typeof obj === "string" ? obj : JSON.stringify(obj, null, 2) }] });
-const fail = (e) => ({ content: [{ type: "text", text: `Error: ${e.message || e}` }], isError: true });
+const text = (obj) => ({
+  content: [{ type: "text", text: typeof obj === "string" ? obj : JSON.stringify(obj, null, 2) }],
+});
+const fail = (e) => ({
+  content: [{ type: "text", text: `Error: ${e.message || e}` }],
+  isError: true,
+});
 
 server.tool(
   "pairing_status",
   "Check whether the Google Messages web session is paired with your phone. Call this first if other tools fail.",
   {},
   async () => {
-    try { return text(await messages.pairingStatus()); } catch (e) { return fail(e); }
-  }
+    try {
+      return text(await messages.pairingStatus());
+    } catch (e) {
+      return fail(e);
+    }
+  },
 );
 
 server.tool(
@@ -30,8 +39,12 @@ server.tool(
   "List recent conversation threads (name, last-message snippet, unread flag).",
   { limit: z.number().int().min(1).max(50).default(20).describe("Max threads to return") },
   async ({ limit }) => {
-    try { return text(await messages.listConversations(limit)); } catch (e) { return fail(e); }
-  }
+    try {
+      return text(await messages.listConversations(limit));
+    } catch (e) {
+      return fail(e);
+    }
+  },
 );
 
 server.tool(
@@ -42,8 +55,12 @@ server.tool(
     limit: z.number().int().min(1).max(100).default(30).describe("Max messages to return"),
   },
   async ({ name, limit }) => {
-    try { return text(await messages.readConversation(name, limit)); } catch (e) { return fail(e); }
-  }
+    try {
+      return text(await messages.readConversation(name, limit));
+    } catch (e) {
+      return fail(e);
+    }
+  },
 );
 
 server.tool(
@@ -54,8 +71,12 @@ server.tool(
     text: z.string().describe("Message body"),
   },
   async ({ to, text: body }) => {
-    try { return text(await messages.sendMessage(to, body)); } catch (e) { return fail(e); }
-  }
+    try {
+      return text(await messages.sendMessage(to, body));
+    } catch (e) {
+      return fail(e);
+    }
+  },
 );
 
 server.tool(
@@ -66,17 +87,27 @@ server.tool(
     limit: z.number().int().min(1).max(50).default(20),
   },
   async ({ query, limit }) => {
-    try { return text(await messages.search(query, limit)); } catch (e) { return fail(e); }
-  }
+    try {
+      return text(await messages.search(query, limit));
+    } catch (e) {
+      return fail(e);
+    }
+  },
 );
 
 server.tool(
   "delete_conversation",
   "Move a conversation to Trash (recoverable from the Messages Trash folder), matched by its EXACT name. Refuses on ambiguity. Destructive — only call with clear user intent.",
-  { name: z.string().describe("Exact conversation name from list_conversations (case-insensitive)") },
+  {
+    name: z.string().describe("Exact conversation name from list_conversations (case-insensitive)"),
+  },
   async ({ name }) => {
-    try { return text(await messages.deleteConversation(name)); } catch (e) { return fail(e); }
-  }
+    try {
+      return text(await messages.deleteConversation(name));
+    } catch (e) {
+      return fail(e);
+    }
+  },
 );
 
 server.tool(
@@ -84,12 +115,22 @@ server.tool(
   "Maintenance: dump the live page URL/title and how many elements each selector matches. Use this to fix selectors when the UI changes.",
   {},
   async () => {
-    try { return text(await messages.debugSnapshot()); } catch (e) { return fail(e); }
-  }
+    try {
+      return text(await messages.debugSnapshot());
+    } catch (e) {
+      return fail(e);
+    }
+  },
 );
 
-process.on("SIGINT", async () => { await messages.close(); process.exit(0); });
-process.on("SIGTERM", async () => { await messages.close(); process.exit(0); });
+process.on("SIGINT", async () => {
+  await messages.close();
+  process.exit(0);
+});
+process.on("SIGTERM", async () => {
+  await messages.close();
+  process.exit(0);
+});
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

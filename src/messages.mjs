@@ -224,9 +224,20 @@ export class Messages {
     const input = page.locator(SEL.composeInput).first();
     await input.click();
     await input.fill(text);
-    const send = page.locator(SEL.sendButton).first();
-    if (await send.isEnabled().catch(() => false)) await send.click();
-    else await input.press("Enter");
+    // There can be multiple send buttons (e.g. a hidden inline one) — click the first
+    // VISIBLE + enabled one; fall back to Enter (which sends in Messages web).
+    const sendButtons = page.locator(SEL.sendButton);
+    const sendCount = await sendButtons.count();
+    let clicked = false;
+    for (let i = 0; i < sendCount; i++) {
+      const b = sendButtons.nth(i);
+      if ((await b.isVisible().catch(() => false)) && (await b.isEnabled().catch(() => false))) {
+        await b.click();
+        clicked = true;
+        break;
+      }
+    }
+    if (!clicked) await input.press("Enter");
     await page.waitForTimeout(1200);
 
     // Confirm the send: a successful send clears the compose box. If the text is

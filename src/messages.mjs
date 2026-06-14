@@ -33,6 +33,9 @@ const SEL = {
   // Conversation list + items (shown when paired)
   convList: "mws-conversations-list, mws-conversation-list",
   convItem: "mws-conversation-list-item",
+  // The inner <a> carries a stable conversation id in its href — used to dedup across
+  // scroll steps (the list recycles DOM nodes, so the same thread reappears).
+  convItemLink: "a.list-item, a[href*='/web/conversations/']",
   convItemName: "[data-e2e-conversation-name], h2.name, .name",
   convItemSnippet: "mws-conversation-snippet, .snippet-text, .snippet",
   convItemUnread: "[data-e2e-is-unread='true']",
@@ -161,71 +164,125 @@ export class Messages {
     if (!s.paired) throw new Error(s.message);
   }
 
-  // Find a conversation by EXACT (case-insensitive) name. Matching the whole item's
-  // text would also match snippets/timestamps and could pick the wrong thread, so we
-  // compare only the name element. Throws on ambiguity; returns null if no match.
+  // --- conversation-list scrolling ----------------------------------------
+  // The list lazy-loads AND recycles DOM nodes: only a window of threads is mounted at
+  // once, and scrolling reveals older ones (dropping ones that scroll out of view). So
+  // to see the whole list we scroll incrementally and accumulate snapshots, keyed by the
+  // stable conversation id, rather than trusting whatever happens to be mounted now.
+
+  async _scrollListTo(pos) {
+    await this.page.evaluate((pos) => {
+      let el = document.querySelector("mws-conversation-list-item");
+      while (el && el !== document.body) {
+        const oy = getComputedStyle(el).overflowY;
+        if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 5) {
+          el.scrollTop = pos;
+          return;
+        }
+        el = el.parentElement;
+      }
+    }, pos);
+    await this.page.waitForTimeout(400);
+  }
+
+  // Scroll the list down by ~80% of a viewport. Returns whether it actually moved
+  // (false ⇒ we're at the bottom).
+  async _scrollListBy() {
+    const moved = await this.page.evaluate(() => {
+      let el = document.querySelector("mws-conversation-list-item");
+      while (el && el !== document.body) {
+        const oy = getComputedStyle(el).overflowY;
+        if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 5) {
+          const before = el.scrollTop;
+          el.scrollTop = Math.min(
+            el.scrollHeight,
+            el.scrollTop + Math.floor(el.clientHeight * 0.8),
+          );
+          return el.scrollTop > before;
+        }
+        el = el.parentElement;
+      }
+      return false;
+    });
+    await this.page.waitForTimeout(600);
+    return moved;
+  }
+
+  // Snapshot the currently-mounted conversation rows in DOM order.
+  async _snapshotLoaded() {
+    return this.page.$$eval(
+      SEL.convItem,
+      (items, sels) =>
+        items.map((it) => {
+          const link = it.querySelector(sels.link);
+          const name = (it.querySelector(sels.name)?.textContent || "").trim();
+          return {
+            id: link?.getAttribute("href") || name,
+            name,
+            snippet: (it.querySelector(sels.snip)?.textContent || "").trim(),
+            unread: !!it.querySelector(sels.unread),
+          };
+        }),
+      {
+        link: SEL.convItemLink,
+        name: SEL.convItemName,
+        snip: SEL.convItemSnippet,
+        unread: SEL.convItemUnread,
+      },
+    );
+  }
+
+  // Scroll from the top, accumulating unique conversations (by id) in order, until we
+  // have `limit` or reach the bottom.
+  async _collectConversations(limit, withMeta) {
+    await this._scrollListTo(0);
+    const map = new Map();
+    let stagnant = 0;
+    for (let pass = 0; pass < 80 && map.size < limit; pass++) {
+      const before = map.size;
+      for (const it of await this._snapshotLoaded()) if (!map.has(it.id)) map.set(it.id, it);
+      const moved = await this._scrollListBy();
+      if (map.size === before) stagnant += 1;
+      else stagnant = 0;
+      if (!moved || stagnant >= 2) break; // reached bottom / nothing new
+    }
+    return [...map.values()]
+      .slice(0, limit)
+      .map((c, index) =>
+        withMeta
+          ? { index, name: c.name, snippet: c.snippet, unread: c.unread }
+          : { name: c.name, snippet: c.snippet },
+      );
+  }
+
+  // Find a conversation by EXACT (case-insensitive) name, scrolling to reach older
+  // threads. Compares only the name element (not snippet/timestamp) so it can't pick the
+  // wrong thread. Returns a LIVE locator (the row is on-screen when returned) or null.
   async _findConversation(name) {
     const target = name.trim().toLowerCase();
     const items = this.page.locator(SEL.convItem);
-    const count = await items.count();
-    const matches = [];
-    for (let i = 0; i < count; i++) {
-      const nm =
-        (
-          await items
-            .nth(i)
-            .locator(SEL.convItemName)
-            .first()
-            .textContent()
-            .catch(() => "")
-        )?.trim() || "";
-      if (nm.toLowerCase() === target) matches.push(i);
+    await this._scrollListTo(0);
+    const seen = new Set();
+    for (let pass = 0; pass < 80; pass++) {
+      const batch = await this._snapshotLoaded();
+      const winMatches = batch
+        .map((b, i) => (b.name.toLowerCase() === target ? i : -1))
+        .filter((i) => i >= 0);
+      if (winMatches.length > 1) {
+        throw new Error(`"${name}" matches multiple conversations exactly — be more specific.`);
+      }
+      if (winMatches.length === 1) return items.nth(winMatches[0]);
+      const before = seen.size;
+      for (const b of batch) seen.add(b.id);
+      const grew = seen.size > before;
+      const moved = await this._scrollListBy();
+      if (!moved && !grew) return null; // bottom + nothing new → exhausted
     }
-    if (matches.length > 1) {
-      throw new Error(
-        `"${name}" matches ${matches.length} conversations exactly — be more specific.`,
-      );
-    }
-    return matches.length === 1 ? items.nth(matches[0]) : null;
+    return null;
   }
 
   async _extractItems(limit, withMeta) {
-    const items = this.page.locator(SEL.convItem);
-    const n = Math.min(await items.count(), limit);
-    const out = [];
-    for (let i = 0; i < n; i++) {
-      const it = items.nth(i);
-      const name =
-        (
-          await it
-            .locator(SEL.convItemName)
-            .first()
-            .textContent()
-            .catch(() => "")
-        )?.trim() || "(unknown)";
-      const snippet =
-        (
-          await it
-            .locator(SEL.convItemSnippet)
-            .first()
-            .textContent()
-            .catch(() => "")
-        )?.trim() || "";
-      const entry = withMeta
-        ? {
-            index: i,
-            name,
-            snippet,
-            unread: await it
-              .locator(SEL.convItemUnread)
-              .first()
-              .isVisible()
-              .catch(() => false),
-          }
-        : { name, snippet };
-      out.push(entry);
-    }
-    return out;
+    return this._collectConversations(limit, withMeta);
   }
 
   async _listConversations(limit) {

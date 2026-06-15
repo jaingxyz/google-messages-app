@@ -1,6 +1,7 @@
 // SAFE inspector for the delete flow. Opens the per-conversation Options menu and
 // the delete confirmation dialog, dumps their structure, then presses Escape to
 // CANCEL. It never clicks a confirm/delete button, so nothing is deleted.
+// Respects GM_HEADLESS (experimental; SPA may not work headless).
 import { chromium } from "playwright";
 import path from "node:path";
 import os from "node:os";
@@ -9,9 +10,26 @@ const PROFILE_DIR =
   process.env.GM_PROFILE_DIR ||
   path.join(os.homedir(), "Library", "Application Support", "google-messages-mcp", "profile");
 
+const headlessEnv = process.env.GM_HEADLESS || process.env.HEADLESS || "";
+const headless =
+  headlessEnv === "true" || headlessEnv === "1" ? true : headlessEnv === "new" ? "new" : false;
+
+const baseArgs = ["--disable-blink-features=AutomationControlled"];
+const headlessArgs = headless
+  ? [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--disable-software-rasterizer",
+      "--use-gl=swiftshader",
+    ]
+  : [];
+
 const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
-  headless: false,
+  headless,
   viewport: { width: 1100, height: 800 },
+  args: [...baseArgs, ...headlessArgs],
 });
 const page = ctx.pages()[0] || (await ctx.newPage());
 await page.goto("https://messages.google.com/web/conversations", { waitUntil: "domcontentloaded" });

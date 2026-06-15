@@ -8,7 +8,11 @@ if (!name) {
   process.exit(1);
 }
 
-const m = new Messages({ headless: false });
+// Respect GM_HEADLESS for testing the experimental headless path.
+const headlessEnv = process.env.GM_HEADLESS || process.env.HEADLESS || "";
+const headless =
+  headlessEnv === "true" || headlessEnv === "1" ? true : headlessEnv === "new" ? "new" : false;
+const m = new Messages({ headless });
 try {
   const result = await m.deleteConversation(name);
   console.log(JSON.stringify(result, null, 2));

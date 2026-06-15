@@ -1,5 +1,7 @@
 // One-off DOM inspector to calibrate selectors against the live, paired page.
-// Headed (the SPA crashes headless). Uses the same persistent profile (already paired).
+// Defaults to headed. Set GM_HEADLESS=true (or 1 / new) to test the experimental
+// headless path. The Messages web SPA may still crash or fail to render.
+// Uses the same persistent profile (already paired).
 import { chromium } from "playwright";
 import path from "node:path";
 import os from "node:os";
@@ -8,9 +10,29 @@ const PROFILE_DIR =
   process.env.GM_PROFILE_DIR ||
   path.join(os.homedir(), "Library", "Application Support", "google-messages-mcp", "profile");
 
+const headlessEnv = process.env.GM_HEADLESS || process.env.HEADLESS || "";
+const headless =
+  headlessEnv === "true" || headlessEnv === "1" ? true : headlessEnv === "new" ? "new" : false;
+
+const baseArgs = ["--disable-blink-features=AutomationControlled"];
+const headlessArgs = headless
+  ? [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--disable-software-rasterizer",
+      "--use-gl=swiftshader",
+      "--disable-features=IsolateOrigins,site-per-process",
+    ]
+  : [];
+
 const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
-  headless: false,
+  headless,
   viewport: { width: 1100, height: 800 },
+  args: [...baseArgs, ...headlessArgs],
+  locale: "en-US",
+  timezoneId: "America/Los_Angeles",
 });
 const page = ctx.pages()[0] || (await ctx.newPage());
 await page.goto("https://messages.google.com/web/conversations", { waitUntil: "domcontentloaded" });

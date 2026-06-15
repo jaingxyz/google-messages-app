@@ -1,5 +1,6 @@
 // Diagnose the post-"Move to trash" state for a specific thread, and complete the
 // deletion if a confirmation dialog is present. Dumps any dialog's buttons verbatim.
+// Respects GM_HEADLESS (experimental).
 import { chromium } from "playwright";
 import path from "node:path";
 import os from "node:os";
@@ -9,9 +10,26 @@ const PROFILE_DIR =
   process.env.GM_PROFILE_DIR ||
   path.join(os.homedir(), "Library", "Application Support", "google-messages-mcp", "profile");
 
+const headlessEnv = process.env.GM_HEADLESS || process.env.HEADLESS || "";
+const headless =
+  headlessEnv === "true" || headlessEnv === "1" ? true : headlessEnv === "new" ? "new" : false;
+
+const baseArgs = ["--disable-blink-features=AutomationControlled"];
+const headlessArgs = headless
+  ? [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--disable-software-rasterizer",
+      "--use-gl=swiftshader",
+    ]
+  : [];
+
 const ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
-  headless: false,
+  headless,
   viewport: { width: 1100, height: 800 },
+  args: [...baseArgs, ...headlessArgs],
 });
 const page = ctx.pages()[0] || (await ctx.newPage());
 await page.goto("https://messages.google.com/web/conversations", { waitUntil: "domcontentloaded" });

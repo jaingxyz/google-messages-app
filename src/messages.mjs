@@ -9,6 +9,7 @@ import { chromium } from "playwright";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
+import { execFileSync } from "node:child_process";
 
 // Not named `URL` — that would shadow the global WHATWG URL constructor.
 const CONVERSATIONS_URL = "https://messages.google.com/web/conversations";
@@ -105,6 +106,88 @@ export class Messages {
     return this._serialize(() => this._close());
   }
 
+  _launchContext() {
+    return chromium.launchPersistentContext(PROFILE_DIR, {
+      headless: this.headless,
+      viewport: { width: 1100, height: 800 },
+      userAgent: USER_AGENT,
+      args: ["--disable-blink-features=AutomationControlled"],
+    });
+  }
+
+  // Chromium leaves a SingletonLock in the profile when it exits; a crash or hard-kill
+  // (e.g. Claude Desktop quitting uncleanly) leaves it behind, blocking the next launch
+  // even though nothing is running. Returns true if the lock was stale and cleared (safe
+  // to retry), false if a LIVE process still holds the profile.
+  _clearStaleLock() {
+    const lock = path.join(PROFILE_DIR, "SingletonLock");
+    let target;
+    try {
+      target = fs.readlinkSync(lock); // POSIX lock is a symlink "hostname-pid"
+    } catch {
+      target = null; // no symlink (or not POSIX) — fall through to best-effort cleanup
+    }
+    if (target) {
+      const pid = parseInt(String(target).split("-").pop(), 10);
+      if (pid > 0) {
+        try {
+          process.kill(pid, 0); // throws ESRCH if dead
+          return false; // a live process owns it — not stale
+        } catch (err) {
+          if (err && err.code === "EPERM") return false; // exists (other user) → alive
+          /* ESRCH → dead pid → stale lock */
+        }
+      }
+    }
+    for (const f of ["SingletonLock", "SingletonSocket", "SingletonCookie"]) {
+      try {
+        fs.rmSync(path.join(PROFILE_DIR, f), { force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+    return true;
+  }
+
+  // Kill Chromium processes holding our profile whose parent is gone (reparented to PID 1)
+  // — orphans left by a crashed/hard-killed prior server. Safe: a browser owned by an
+  // ACTIVE client still has a live parent (ppid != 1), so it's never touched. Returns true
+  // if any orphan was killed. (POSIX/macOS; best-effort.)
+  _reclaimOrphanedProfile() {
+    let pids;
+    try {
+      // Match the profile path itself, not "--user-data-dir=…" — a pattern starting with
+      // "--" makes pgrep treat it as options ("illegal option").
+      pids = execFileSync("pgrep", ["-f", PROFILE_DIR], { encoding: "utf8" })
+        .split("\n")
+        .map((s) => parseInt(s, 10))
+        .filter(Boolean);
+    } catch {
+      return false; // pgrep not found, or no matches
+    }
+    let killed = false;
+    for (const pid of pids) {
+      let ppid = 0;
+      try {
+        ppid = parseInt(
+          execFileSync("ps", ["-o", "ppid=", "-p", String(pid)], { encoding: "utf8" }).trim(),
+          10,
+        );
+      } catch {
+        continue;
+      }
+      if (ppid === 1) {
+        try {
+          process.kill(pid);
+          killed = true;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    return killed;
+  }
+
   // --- browser lifecycle (unlocked: idempotent, also called by app.mjs) ----
   async ensureReady() {
     if (this.page && !this.page.isClosed()) return this.page;
@@ -113,12 +196,27 @@ export class Messages {
     // All logs go to stderr — stdout is reserved for the MCP protocol.
     console.error(`[messages] launching Chromium (profile: ${PROFILE_DIR})`);
 
-    this.context = await chromium.launchPersistentContext(PROFILE_DIR, {
-      headless: this.headless,
-      viewport: { width: 1100, height: 800 },
-      userAgent: USER_AGENT,
-      args: ["--disable-blink-features=AutomationControlled"],
-    });
+    try {
+      this.context = await this._launchContext();
+    } catch (e) {
+      const msg = String((e && e.message) || e);
+      if (!/in use|singleton|user data dir|ProcessSingleton/i.test(msg)) throw e;
+      // Profile appears locked. Recover if it's a prior-session leftover: an orphaned
+      // Chromium whose parent server died, or a stale lock file. Reclaim orphans FIRST so
+      // the subsequent stale-lock check sees their now-dead pid. If a LIVE client still
+      // owns it, neither recovers it — say so clearly.
+      const killedOrphan = this._reclaimOrphanedProfile();
+      const clearedLock = this._clearStaleLock(); // false only if a live pid owns the lock
+      if (!killedOrphan && !clearedLock) {
+        throw new Error(
+          "The Google Messages profile is open in another window or client (e.g. Claude Desktop and the CLI at the same time, or `npm run app`). Use it from one place at a time, then retry.",
+        );
+      }
+      console.error("[messages] recovered a profile lock from a prior session; retrying");
+      await new Promise((r) => setTimeout(r, 800)); // let the OS release the lock
+      this._clearStaleLock(); // clear any lock the reclaimed orphan left behind
+      this.context = await this._launchContext();
+    }
     this.page = this.context.pages()[0] || (await this.context.newPage());
     await this.page.goto(CONVERSATIONS_URL, { waitUntil: "domcontentloaded" });
     // Wait until the SPA renders EITHER the conversation list items (paired) or the

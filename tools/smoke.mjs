@@ -2,7 +2,11 @@
 // Does NOT send anything.
 import { Messages } from "../src/messages.mjs";
 
-const m = new Messages({ headless: false });
+// Respect GM_HEADLESS for testing the experimental headless path.
+const headlessEnv = process.env.GM_HEADLESS || process.env.HEADLESS || "";
+const headless =
+  headlessEnv === "true" || headlessEnv === "1" ? true : headlessEnv === "new" ? "new" : false;
+const m = new Messages({ headless });
 try {
   console.log("pairing:", await m.pairingStatus());
   const convos = await m.listConversations(5);

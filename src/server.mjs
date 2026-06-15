@@ -7,9 +7,20 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { Messages } from "./messages.mjs";
 
-// Always headed — the same window doubles as your "app", and the Messages web
-// SPA crashes under headless Chromium, so there is no headless mode.
-const messages = new Messages({ headless: false });
+// Headed by default. The Messages web SPA has historically crashed or rendered
+// incorrectly under true headless Chromium (no display). Set GM_HEADLESS=true
+// (or "1" or "new") to experiment with headless mode. This is **unsupported** —
+// success is not guaranteed. See messages.mjs for extra launch flags and README
+// for caveats. The profile lock handling still applies (only one instance).
+const headlessEnv = process.env.GM_HEADLESS || process.env.HEADLESS || "";
+const headless =
+  headlessEnv === "true" || headlessEnv === "1" ? true : headlessEnv === "new" ? "new" : false;
+
+console.error(
+  `[google-messages-mcp] launching with headless=${headless} (GM_HEADLESS env=${JSON.stringify(process.env.GM_HEADLESS || null)}). In headed mode the browser window is placed far off-screen so navigation is invisible.`,
+);
+
+const messages = new Messages({ headless });
 
 const server = new McpServer({ name: "google-messages", version: "1.0.0" });
 

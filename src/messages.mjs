@@ -107,11 +107,54 @@ export class Messages {
   }
 
   _launchContext() {
+    const baseArgs = ["--disable-blink-features=AutomationControlled"];
+
+    // Flags to keep the page active even when the window is occluded/minimized/off-screen.
+    // Important for headed "invisible" automation (the normal path for background use).
+    const stealthFlags = [
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+    ];
+
+    // Extra flags that often help when trying true headless (experimental).
+    // The Messages web SPA has historically crashed or failed to render under
+    // headless Chromium; these are best-effort and may not be sufficient.
+    const headlessArgs = this.headless
+      ? [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+          "--disable-software-rasterizer",
+          "--use-gl=swiftshader",
+          "--disable-features=IsolateOrigins,site-per-process",
+          ...stealthFlags,
+        ]
+      : [];
+
+    // For headed mode (the normal "app" window), move the window far off-screen
+    // so automation/navigation is not visible on your desktop. We also apply
+    // stealth flags so the SPA doesn't get throttled while occluded.
+    if (!this.headless) {
+      baseArgs.push("--window-position=-100000,-100000");
+      baseArgs.push("--window-size=1,1"); // start as small as possible to reduce flash
+      baseArgs.push("--no-first-run");
+      baseArgs.push("--no-default-browser-check");
+      baseArgs.push("--disable-infobars");
+      baseArgs.push("--disable-notifications");
+      baseArgs.push("--disable-popup-blocking");
+      baseArgs.push(...stealthFlags);
+    }
+
     return chromium.launchPersistentContext(PROFILE_DIR, {
       headless: this.headless,
       viewport: { width: 1100, height: 800 },
       userAgent: USER_AGENT,
-      args: ["--disable-blink-features=AutomationControlled"],
+      args: [...baseArgs, ...headlessArgs],
+      // Some SPAs behave better with a realistic locale / timezone
+      locale: "en-US",
+      timezoneId: "America/Los_Angeles",
     });
   }
 
@@ -188,16 +231,51 @@ export class Messages {
     return killed;
   }
 
+  /**
+   * Hide/minimize the browser window on macOS.
+   * We target by PID (unix id) only — never by name — so we do not affect
+   * the user's real Chrome or other Chromium instances.
+   */
+  _hideWindowMac(pid) {
+    if (process.platform !== "darwin" || !pid) return;
+    const script = `
+      tell application "System Events"
+        try
+          set p to first process whose unix id is ${pid}
+          set visible of p to false
+          set position of window 1 of p to {-100000, -100000}
+          set size of window 1 of p to {1, 1}
+          set miniaturized of window 1 of p to true
+          set frontmost of p to false
+        end try
+      end tell
+    `;
+    try {
+      execFileSync("osascript", ["-e", script], { stdio: "ignore" });
+    } catch (e) {
+      console.error("[messages] osascript window hide failed (non-fatal):", e.message);
+    }
+  }
+
   // --- browser lifecycle (unlocked: idempotent, also called by app.mjs) ----
   async ensureReady() {
     if (this.page && !this.page.isClosed()) return this.page;
 
     fs.mkdirSync(PROFILE_DIR, { recursive: true });
     // All logs go to stderr — stdout is reserved for the MCP protocol.
-    console.error(`[messages] launching Chromium (profile: ${PROFILE_DIR})`);
+    console.error(
+      `[messages] launching Chromium (profile: ${PROFILE_DIR}, headless: ${this.headless})`,
+    );
 
     try {
       this.context = await this._launchContext();
+
+      // Hide the launched browser immediately using its PID (safe, name-based matching
+      // would also affect the user's real Chrome).
+      if (!this.headless && process.platform === "darwin") {
+        const pid = this.context.browser?.()?.process?.()?.pid;
+        if (pid) this._hideWindowMac(pid);
+      }
     } catch (e) {
       const msg = String((e && e.message) || e);
       if (!/in use|singleton|user data dir|ProcessSingleton/i.test(msg)) throw e;
@@ -216,7 +294,30 @@ export class Messages {
       await new Promise((r) => setTimeout(r, 800)); // let the OS release the lock
       this._clearStaleLock(); // clear any lock the reclaimed orphan left behind
       this.context = await this._launchContext();
+
+      if (!this.headless && process.platform === "darwin") {
+        const pid = this.context.browser?.()?.process?.()?.pid;
+        if (pid) this._hideWindowMac(pid);
+      }
     }
+
+    // On macOS in headed mode, hide the launched browser (by PID) as early as possible.
+    // This is the reliable path for invisible automation while the SPA stays active.
+    if (!this.headless && process.platform === "darwin" && this.context) {
+      const pid = this.context.browser?.()?.process?.()?.pid;
+      if (pid) {
+        this._hideWindowMac(pid);
+        // Reinforcement in case the window materializes after the first script
+        setTimeout(() => this._hideWindowMac(pid), 250);
+        setTimeout(() => {
+          this._hideWindowMac(pid);
+          console.error(
+            "[messages] Chromium window fully hidden (visible=false + offscreen + minimized)",
+          );
+        }, 700);
+      }
+    }
+
     this.page = this.context.pages()[0] || (await this.context.newPage());
     await this.page.goto(CONVERSATIONS_URL, { waitUntil: "domcontentloaded" });
     // Wait until the SPA renders EITHER the conversation list items (paired) or the

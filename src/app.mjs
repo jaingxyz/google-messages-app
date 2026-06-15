@@ -8,7 +8,14 @@
 
 import { Messages } from "./messages.mjs";
 
-const messages = new Messages({ headless: false });
+// The standalone app is normally headed (visible window). You can still force
+// experimental headless with GM_HEADLESS=true for testing, but you won't see
+// anything and the SPA may not work.
+const headlessEnv = process.env.GM_HEADLESS || process.env.HEADLESS || "";
+const headless =
+  headlessEnv === "true" || headlessEnv === "1" ? true : headlessEnv === "new" ? "new" : false;
+
+const messages = new Messages({ headless });
 await messages.ensureReady();
 const status = await messages.pairingStatus();
 console.error(status.message);

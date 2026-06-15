@@ -52,8 +52,25 @@ replace `/ABSOLUTE/PATH/TO` with wherever you cloned this repo (run `pwd` in the
 }
 ```
 
-> **Note:** the app must run with a visible window — the Messages web SPA crashes under
-> headless Chromium, so there is no headless mode.
+> **Note:** The Messages web SPA has historically crashed or failed to render
+> correctly under true headless Chromium. By default we run **headed** but make
+> the window 100% invisible on macOS for automation (Garvis, MCP clients, etc.):
+>
+> - Launch args: `--window-position=-100000,-100000 --window-size=1,1` plus
+>   common suppression flags (`--no-first-run`, `--disable-infobars`, etc.).
+> - As soon as the browser context is created (and at 250ms + 700ms), AppleScript
+>   forces: `visible of process = false`, window to off-screen + tiny size,
+>   minimized, and not frontmost.
+>
+> This keeps your persistent paired session working while preventing any visible
+> window or navigation during tool calls / Garvis sweeps.
+>
+> You can still force experimental true headless with `GM_HEADLESS=true` (or `1`
+> or `new`) if you want to try, but success is not guaranteed.
+>
+> Profile lock handling still applies (only one client can hold the profile).
+> For Garvis the pkill + sleep logic is only active when not using the hidden-headed
+> path.
 
 ### Tools
 

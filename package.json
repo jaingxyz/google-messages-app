@@ -9,6 +9,9 @@
   "engines": {
     "node": ">=20"
   },
+  "overrides": {
+    "@hono/node-server": "^2.0.5"
+  },
   "scripts": {
     "app": "node src/app.mjs",
     "mcp": "node src/server.mjs",

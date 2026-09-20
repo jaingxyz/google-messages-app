@@ -40,6 +40,9 @@ const SEL = {
   convItemName: "[data-e2e-conversation-name], h2.name, .name",
   convItemSnippet: "mws-conversation-snippet, .snippet-text, .snippet",
   convItemUnread: "[data-e2e-is-unread='true']",
+  // Row timestamp: "9:49 PM" today, a weekday this week, "Oct 23" this year, or
+  // "Oct 23, 2025". Some builds put a fuller date in the element's title/aria-label.
+  convItemTime: "[data-e2e-conversation-timestamp], mws-relative-timestamp, .timestamp, time",
   // Open thread: message bubbles. Outgoing is the wrapper's `is-outgoing` attribute.
   messageWrapper: "mws-message-wrapper",
   // One entry per text part. `.text-msg` is nested INSIDE the part, so it's only a
@@ -388,7 +391,8 @@ export class Messages {
   // (false ⇒ we're at the bottom).
   async _scrollListBy() {
     const moved = await this.page.evaluate(() => {
-      let el = document.querySelector("mws-conversation-list-item");
+      const rows = document.querySelectorAll("mws-conversation-list-item");
+      let el = rows[0];
       while (el && el !== document.body) {
         const oy = getComputedStyle(el).overflowY;
         if ((oy === "auto" || oy === "scroll") && el.scrollHeight > el.clientHeight + 5) {
@@ -397,13 +401,23 @@ export class Messages {
             el.scrollHeight,
             el.scrollTop + Math.floor(el.clientHeight * 0.8),
           );
-          return el.scrollTop > before;
+          if (el.scrollTop > before) return true;
+          break; // already at this container's bottom — fall through to the row nudge
         }
         el = el.parentElement;
       }
-      return false;
+      // Fallback: the list may virtualize without an obviously scrollable ancestor, or be
+      // parked at the bottom of what it has loaded so far. Pulling the LAST row into view
+      // is what makes it fetch the next (older) page.
+      const last = rows[rows.length - 1];
+      if (!last) return false;
+      const wasBottom = last.getBoundingClientRect().bottom;
+      last.scrollIntoView({ block: "end" });
+      return last.getBoundingClientRect().bottom !== wasBottom;
     });
-    await this.page.waitForTimeout(600);
+    // Older threads are fetched on demand, so give the list time to append them before
+    // the next snapshot — otherwise the walk looks "stagnant" and stops early.
+    await this.page.waitForTimeout(900);
     return moved;
   }
 
@@ -415,11 +429,21 @@ export class Messages {
         items.map((it) => {
           const link = it.querySelector(sels.link);
           const name = (it.querySelector(sels.name)?.textContent || "").trim();
+          const timeEl = it.querySelector(sels.time);
+          // Prefer title/aria-label when present: they usually carry the full date,
+          // while the visible text is abbreviated ("9:49 PM", "Thu", "Oct 23").
+          const time = (
+            timeEl?.getAttribute("title") ||
+            timeEl?.getAttribute("aria-label") ||
+            timeEl?.textContent ||
+            ""
+          ).trim();
           return {
             id: link?.getAttribute("href") || name,
             name,
             snippet: (it.querySelector(sels.snip)?.textContent || "").trim(),
             unread: !!it.querySelector(sels.unread),
+            time,
           };
         }),
       {
@@ -427,6 +451,7 @@ export class Messages {
         name: SEL.convItemName,
         snip: SEL.convItemSnippet,
         unread: SEL.convItemUnread,
+        time: SEL.convItemTime,
       },
     );
   }
@@ -437,20 +462,28 @@ export class Messages {
     await this._scrollListTo(0);
     const map = new Map();
     let stagnant = 0;
-    for (let pass = 0; pass < 80 && map.size < limit; pass++) {
+    let stuck = 0;
+    // Reaching far-back threads means many scroll steps, and the list pauses while it
+    // fetches older pages: a couple of empty passes is normal, so be patient before
+    // calling it the bottom. The pass cap scales with the limit (rows load in batches).
+    const maxPasses = Math.max(80, limit * 4);
+    for (let pass = 0; pass < maxPasses && map.size < limit; pass++) {
       const before = map.size;
       for (const it of await this._snapshotLoaded()) if (!map.has(it.id)) map.set(it.id, it);
       const moved = await this._scrollListBy();
       if (map.size === before) stagnant += 1;
       else stagnant = 0;
-      if (!moved || stagnant >= 2) break; // reached bottom / nothing new
+      // `moved === false` can also mean "still loading", so only treat repeated
+      // no-movement AND no-new-rows as the real end of the list.
+      stuck = moved ? 0 : stuck + 1;
+      if (stagnant >= 6 && stuck >= 3) break; // reached bottom / nothing new
     }
     return [...map.values()]
       .slice(0, limit)
       .map((c, index) =>
         withMeta
-          ? { index, name: c.name, snippet: c.snippet, unread: c.unread }
-          : { name: c.name, snippet: c.snippet },
+          ? { index, name: c.name, snippet: c.snippet, unread: c.unread, time: c.time }
+          : { name: c.name, snippet: c.snippet, time: c.time },
       );
   }
 

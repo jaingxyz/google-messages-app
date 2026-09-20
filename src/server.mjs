@@ -47,8 +47,12 @@ server.tool(
 
 server.tool(
   "list_conversations",
-  "List recent conversation threads (name, last-message snippet, unread flag).",
-  { limit: z.number().int().min(1).max(50).default(20).describe("Max threads to return") },
+  "List conversation threads, newest first (name, last-message snippet, unread flag, and " +
+    "the row's timestamp as the UI shows it: a time today, a weekday this week, else a date). " +
+    "Reaching older threads scrolls the list, so a large limit takes longer.",
+  {
+    limit: z.number().int().min(1).max(500).default(20).describe("Max threads to return"),
+  },
   async ({ limit }) => {
     try {
       return text(await messages.listConversations(limit));

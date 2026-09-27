@@ -27,7 +27,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
     "playwright": "^1.63.0",
-    "zod": "^4.6.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "husky": "^9.1.7",
